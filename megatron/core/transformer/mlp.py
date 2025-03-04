@@ -20,6 +20,11 @@ from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
 from megatron.core.transformer.transformer_config import TransformerConfig
 
+try:
+    from liger_kernel.ops.swiglu import LigerSiLUMulFunction
+except ImportError:
+    LigerSiLUMulFunction = None
+
 
 # pylint: disable=missing-class-docstring
 @dataclass
@@ -97,7 +102,18 @@ class MLP(MegatronModule):
         # [s, b, 4 * h/p]
         intermediate_parallel, bias_parallel = self.linear_fc1(hidden_states)
 
-        if self.config.bias_activation_fusion:
+        if "swiglu" in self.config.liger_kernel:
+            assert self.config.gated_linear_unit
+            if bias_parallel is not None:
+                intermediate_parallel = intermediate_parallel + bias_parallel
+
+            def liger_glu(x):
+                x = torch.chunk(x, 2, dim=-1)
+                return LigerSiLUMulFunction.apply(x[0], x[1])
+
+            intermediate_parallel = liger_glu(intermediate_parallel)
+
+        elif self.config.bias_activation_fusion:
             if self.activation_func == F.gelu:
                 if self.config.gated_linear_unit:
                     intermediate_parallel = bias_geglu_impl(intermediate_parallel, bias_parallel)

@@ -39,7 +39,10 @@ from megatron.core.models.gpt.gpt_layer_specs import (
 
 stimer = StragglerDetector()
 
-def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megatron.legacy.model.GPTModel]:
+
+def model_provider(
+        pre_process=True,
+        post_process=True) -> Union[GPTModel, megatron.legacy.model.GPTModel]:
     """Builds the model.
 
     If you set the use_legacy_models to True, it will return the legacy GPT model and if not the mcore GPT model.
@@ -56,7 +59,8 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
     use_te = args.transformer_impl == "transformer_engine"
 
     if args.record_memory_history:
-        torch.cuda.memory._record_memory_history(True,
+        torch.cuda.memory._record_memory_history(
+            True,
             # keep 100,000 alloc/free events from before the snapshot
             trace_alloc_max_entries=100000,
 
@@ -68,7 +72,11 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
             print('saving allocated state during OOM')
             snapshot = torch.cuda.memory._snapshot()
             from pickle import dump
-            dump(snapshot, open(f"oom_rank-{torch.distributed.get_rank()}_{args.memory_snapshot_path}", 'wb'))
+            dump(
+                snapshot,
+                open(
+                    f"oom_rank-{torch.distributed.get_rank()}_{args.memory_snapshot_path}",
+                    'wb'))
 
         torch._C._cuda_attach_out_of_memory_observer(oom_observer)
 
@@ -87,23 +95,26 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
             pre_process=pre_process,
             post_process=post_process,
         )
-    else: # using core models
+    else:  # using core models
         if args.spec is not None:
             transformer_layer_spec = import_module(args.spec)
         else:
             if args.num_experts:
                 # Define the decoder block spec
-                transformer_layer_spec = get_gpt_decoder_block_spec(config, use_transformer_engine=use_te)
+                transformer_layer_spec = get_gpt_decoder_block_spec(
+                    config, use_transformer_engine=use_te)
             else:
                 # Define the decoder layer spec
                 if use_te:
                     transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
                         args.num_experts, args.moe_grouped_gemm,
-                        args.qk_layernorm, args.multi_latent_attention, args.moe_use_legacy_grouped_gemm)
+                        args.qk_layernorm, args.multi_latent_attention,
+                        args.moe_use_legacy_grouped_gemm)
                 else:
                     transformer_layer_spec = get_gpt_layer_local_spec(
                         args.num_experts, args.moe_grouped_gemm,
-                        args.qk_layernorm, args.multi_latent_attention, args.moe_use_legacy_grouped_gemm)
+                        args.qk_layernorm, args.multi_latent_attention,
+                        args.moe_use_legacy_grouped_gemm)
 
         build_model_context = nullcontext
         build_model_context_args = {}
@@ -115,10 +126,14 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
                 build_model_context_args["enabled"] = True
 
                 # Check if fp8_model_init supports preserve_high_precision_init_val
-                if "preserve_high_precision_init_val" in inspect.signature(fp8_model_init).parameters:
-                    build_model_context_args["preserve_high_precision_init_val"] = True
+                if "preserve_high_precision_init_val" in inspect.signature(
+                        fp8_model_init).parameters:
+                    build_model_context_args[
+                        "preserve_high_precision_init_val"] = True
             except:
-                raise RuntimeError("--fp8-param-gather requires `fp8_model_init` from TransformerEngine, but not found.")
+                raise RuntimeError(
+                    "--fp8-param-gather requires `fp8_model_init` from TransformerEngine, but not found."
+                )
 
         with build_model_context(**build_model_context_args):
             model = GPTModel(
@@ -130,12 +145,12 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
                 post_process=post_process,
                 fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
                 parallel_output=True,
-                share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+                share_embeddings_and_output_weights=not args.
+                untie_embeddings_and_output_weights,
                 position_embedding_type=args.position_embedding_type,
                 rotary_percent=args.rotary_percent,
                 rotary_base=args.rotary_base,
-                rope_scaling=args.use_rope_scaling
-            )
+                rope_scaling=args.use_rope_scaling)
 
     return model
 
@@ -144,7 +159,8 @@ def get_batch(data_iterator):
     """Generate a batch."""
 
     # TODO: this is pretty hacky, find a better way
-    if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
+    if (not mpu.is_pipeline_first_stage()) and (
+            not mpu.is_pipeline_last_stage()):
         return None, None, None, None, None
 
     # get batches based on the TP rank you are on
@@ -178,10 +194,13 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
     losses = output_tensor.float()
     loss_mask = loss_mask.view(-1).float()
     total_tokens = loss_mask.sum()
-    loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), total_tokens.view(1)])
+    loss = torch.cat(
+        [torch.sum(losses.view(-1) * loss_mask).view(1),
+         total_tokens.view(1)])
 
     if args.context_parallel_size > 1:
-        torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
+        torch.distributed.all_reduce(loss,
+                                     group=mpu.get_context_parallel_group())
 
     # Check individual rank losses are not NaN prior to DP all-reduce.
     rerun_state_machine = get_rerun_state_machine()
@@ -190,14 +209,14 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
             result=loss[0],
             rejection_func=torch.isnan,
             message="found NaN in local forward loss calculation",
-            tolerance=0.0,        # forward pass calculations are determinisic
+            tolerance=0.0,  # forward pass calculations are determinisic
             fatal=True,
         )
         rerun_state_machine.validate_result(
             result=loss[0],
             rejection_func=torch.isinf,
             message="found Inf in local forward loss calculation",
-            tolerance=0.0,        # forward pass calculations are determinisic
+            tolerance=0.0,  # forward pass calculations are determinisic
             fatal=True,
         )
     # Check for spiky loss
@@ -210,18 +229,21 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
                 context="loss",
             ),
             message="Spiky loss",
-            tolerance=0.0,        # forward pass calculations are determinisic
+            tolerance=0.0,  # forward pass calculations are determinisic
             fatal=False,
         )
     # Reduce loss for logging.
     reporting_loss = loss.clone().detach()
-    torch.distributed.all_reduce(reporting_loss, group=mpu.get_data_parallel_group())
+    torch.distributed.all_reduce(reporting_loss,
+                                 group=mpu.get_data_parallel_group())
 
     local_num_tokens = loss[1].clone().detach().to(torch.int)
     return (
         loss[0] * args.context_parallel_size,
         local_num_tokens,
-        {'lm loss': (reporting_loss[0], reporting_loss[1])},
+        {
+            'lm loss': (reporting_loss[0], reporting_loss[1])
+        },
     )
 
 
@@ -244,16 +266,17 @@ def forward_step(data_iterator, model: GPTModel):
     timers('batch-generator').stop()
 
     with stimer:
-        output_tensor = model(tokens, position_ids, attention_mask,
+        output_tensor = model(tokens,
+                              position_ids,
+                              attention_mask,
                               labels=labels)
 
     return output_tensor, partial(loss_func, loss_mask)
 
 
 def is_dataset_built_on_rank():
-    return (
-        mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()
-    ) and mpu.get_tensor_model_parallel_rank() == 0
+    return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()
+            ) and mpu.get_tensor_model_parallel_rank() == 0
 
 
 def core_gpt_dataset_config_from_args(args):
@@ -261,7 +284,8 @@ def core_gpt_dataset_config_from_args(args):
 
     # Sometimes --data-path is too long, instead we parse it from a file.
     blend: Optional[Tuple[List[str], Optional[List[float]]]]
-    blend_per_split: Optional[List[Optional[Tuple[List[str], Optional[List[float]]]]]]
+    blend_per_split: Optional[List[Optional[Tuple[List[str],
+                                                  Optional[List[float]]]]]]
     blend, blend_per_split = get_blend_and_blend_per_split(args)
 
     return GPTDatasetConfig(
@@ -300,11 +324,8 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     print_rank_0("> building train, validation, and test datasets for GPT ...")
 
     train_ds, valid_ds, test_ds = BlendedMegatronDatasetBuilder(
-        dataset_type,
-        train_val_test_num_samples,
-        is_dataset_built_on_rank,
-        config
-    ).build()
+        dataset_type, train_val_test_num_samples, is_dataset_built_on_rank,
+        config).build()
 
     print_rank_0("> finished creating GPT datasets ...")
 

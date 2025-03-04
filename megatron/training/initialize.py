@@ -310,9 +310,10 @@ def _initialize_distributed(get_embedding_ranks, get_position_embedding_ranks):
         # Call the init process
         init_process_group_kwargs = {
             'backend': args.distributed_backend,
-            'world_size': args.world_size,
-            'rank': args.rank,
+            # 'world_size': args.world_size,
+            # 'rank': args.rank,
             'timeout': timedelta(minutes=args.distributed_timeout_minutes),
+            # 'device_id': device_id,
         }
 
         torch.distributed.init_process_group(**init_process_group_kwargs)

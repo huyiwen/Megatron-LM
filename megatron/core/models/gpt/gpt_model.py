@@ -18,6 +18,11 @@ from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 
+try:
+    from liger_kernel.transformers.fused_linear_cross_entropy import LigerFusedLinearCrossEntropyLoss
+except ImportError:
+    LigerFusedLinearCrossEntropyLoss = None
+
 
 class GPTModel(LanguageModule):
     """GPT Transformer language model.
@@ -280,27 +285,42 @@ class GPTModel(LanguageModule):
         output_weight = None
         if self.share_embeddings_and_output_weights:
             output_weight = self.shared_embedding_or_output_weight()
-        logits, _ = self.output_layer(
-            hidden_states, weight=output_weight, runtime_gather_output=runtime_gather_output
-        )
+        if "lce" in self.config.liger_kernel:
+            if has_config_logger_enabled(self.config):
+                payload = OrderedDict(
+                    {
+                        'input_ids': input_ids,
+                        'position_ids': position_ids,
+                        'attention_mask': attention_mask,
+                        'decoder_input': decoder_input,
+                    }
+                )
+                log_config_to_disk(self.config, payload, prefix='input_and_logits')
 
-        if has_config_logger_enabled(self.config):
-            payload = OrderedDict(
-                {
-                    'input_ids': input_ids,
-                    'position_ids': position_ids,
-                    'attention_mask': attention_mask,
-                    'decoder_input': decoder_input,
-                    'logits': logits,
-                }
+            lce = LigerFusedLinearCrossEntropyLoss(reduction="mean")
+            loss = lce(output_weight, hidden_states.view(-1, hidden_states.shape[-1]), labels.view(-1))
+        else:
+            logits, _ = self.output_layer(
+                hidden_states, weight=output_weight, runtime_gather_output=runtime_gather_output
             )
-            log_config_to_disk(self.config, payload, prefix='input_and_logits')
 
-        if labels is None:
-            # [s b h] => [b s h]
-            return logits.transpose(0, 1).contiguous()
+            if has_config_logger_enabled(self.config):
+                payload = OrderedDict(
+                    {
+                        'input_ids': input_ids,
+                        'position_ids': position_ids,
+                        'attention_mask': attention_mask,
+                        'decoder_input': decoder_input,
+                        'logits': logits,
+                    }
+                )
+                log_config_to_disk(self.config, payload, prefix='input_and_logits')
 
-        loss = self.compute_language_model_loss(labels, logits)
+            if labels is None:
+                # [s b h] => [b s h]
+                return logits.transpose(0, 1).contiguous()
+
+            loss = self.compute_language_model_loss(labels, logits)
 
         return loss
 
