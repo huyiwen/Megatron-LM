@@ -1,0 +1,1 @@
+/data/pretrain-mini/train-moe/submit-job.sh
