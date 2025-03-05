@@ -127,13 +127,14 @@ TRAINING_ARGS=(
     --data-parallel-sharding-strategy optim_grads
     # --use-torch-fsdp2
     --no-gradient-accumulation-fusion
-    --untie-embeddings-and-output-weights
+    # --untie-embeddings-and-output-weights
+    --calculate-per-token-loss
 )
 
 MODEL_PARALLEL_ARGS=(
     --tensor-model-parallel-size $TP
     --pipeline-model-parallel-size $PP
-    --distributed-timeout-minutes 5
+    --distributed-timeout-minutes 10
     # --overlap-grad-reduce
     # --overlap-param-gather
 )
@@ -154,7 +155,7 @@ EVAL_AND_LOGGING_ARGS=(
     --save $CHECKPOINT_PATH
     --eval-iters 10
     --tensorboard-dir $TENSORBOARD_LOGS_PATH
-    --disable-gloo-process-groups
+    # --disable-gloo-process-groups
     --use-persistent-ckpt-worker
     --async-save
     --ckpt-fully-parallel-load
