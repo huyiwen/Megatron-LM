@@ -38,7 +38,7 @@ mkdir -p $TENSORBOARD_LOGS_PATH
 # Parallelism
 TP=1
 PP=1
-MICRO_BATCH_SIZE=8
+MICRO_BATCH_SIZE=2
 ACC=1
 GLOBAL_BATCH_SIZE=$(($MICRO_BATCH_SIZE*$WORLD_SIZE/$TP/$PP*$ACC))
 
@@ -117,14 +117,14 @@ TRAINING_ARGS=(
     # --cross-entropy-loss-fusion
     # --recompute-activations
     --recompute-method uniform
-    --recompute-num-layers 56
+    --recompute-num-layers 24
     --recompute-granularity full
     # --no-persist-layer-norm
     # --check-for-spiky-loss
     # --check-for-large-grads
     --use-distributed-optimizer
     --use-custom-fsdp
-    --data-parallel-sharding-strategy optim_grads
+    --data-parallel-sharding-strategy optim_grads_params
     # --use-torch-fsdp2
     --no-gradient-accumulation-fusion
     # --untie-embeddings-and-output-weights
