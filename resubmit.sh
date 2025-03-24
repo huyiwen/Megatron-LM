@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SCRIPT=/data/Megatron-LM/submit-job.sh
+
 while true; do
     # 获取包含train的pod信息
     pod_status=$(kubectl get pods -o wide | grep train | grep -v Init)
@@ -10,8 +12,8 @@ while true; do
         echo "$pod_status"
 
         # 执行你的bash脚本
-        /data/flame/submit-job.sh
-        curl -H "Content-Type: application/json" -X POST https://wxpusher.zjiecode.com/api/send/message --data "{\"appToken\": \"AT_6x1rUKLWJsd3DGyvm7NNxpI3GNr7bEN5\", \"content\": \"resubmit $pod_status\", \"topicIds\": [37328]}"
+        bash $SCRIPT
+        curl -H "Content-Type: application/json" -X POST https://wxpusher.zjiecode.com/api/send/message --data "{\"appToken\": \"AT_6x1rUKLWJsd3DGyvm7NNxpI3GNr7bEN5\", \"content\": \"resubmit ${pod_status:-Empty}\", \"topicIds\": [37328]}"
         echo "脚本执行完毕,继续监控..."
         sleep 240
     fi
@@ -23,8 +25,7 @@ while true; do
         echo "$error_logs"
 
         # 执行你的bash脚本
-        /data/flame/submit-job.sh
-
+        bash $SCRIPT
         curl -H "Content-Type: application/json" -X POST https://wxpusher.zjiecode.com/api/send/message --data "{\"appToken\": \"AT_6x1rUKLWJsd3DGyvm7NNxpI3GNr7bEN5\", \"content\": \"resubmit $error_logs\", \"topicIds\": [37328]}"
         echo "脚本执行完毕,继续监控..."
         sleep 240
