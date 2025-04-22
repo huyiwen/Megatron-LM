@@ -22,7 +22,7 @@ export HF_ENDPOINT=https://hf-mirror.com
 # NCCL_IB_RETRY_CNT=100
 
 # Load from kubectl
-GPUS_PER_NODE=${NGPU:-1}
+GPUS_PER_NODE=${NGPU:-8}
 MASTER_ADDR=${MASTER_ADDR:-localhost}
 MASTER_PORT=${MASTER_PORT:-0}
 NUM_NODES=${NNODES:-1}
@@ -36,7 +36,7 @@ DATA_PATH=/cpfs01/user/wenxian.hyw/hyw/dataset/17_20241108_004951_input_ids_docu
 mkdir -p $TENSORBOARD_LOGS_PATH
 
 # Parallelism
-TP=1
+TP=2
 PP=1
 MICRO_BATCH_SIZE=1
 ACC=1
